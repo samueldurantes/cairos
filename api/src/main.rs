@@ -7,7 +7,8 @@ mod http;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv::dotenv().ok();
+    dotenvy::from_filename(".env").ok();
+    dotenvy::from_filename("api/.env").ok();
     env_logger::init();
 
     let config = config::Config::parse();

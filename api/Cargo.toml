@@ -19,7 +19,6 @@ sqlx = { version = "0.8.6", features = [
 ] }
 time = { version = "0.3.41", features = ["serde", "macros"] }
 dotenvy = "0.15.7"
-dotenv = "0.15.0"
 env_logger = "0.11.8"
 clap = { version = "4.5.45", features = ["derive", "env"] }
 anyhow = "1.0.99"
