@@ -58,12 +58,8 @@ pub struct AuthRequest {
 }
 
 pub async fn serve(config: Config, db: PgPool) -> anyhow::Result<()> {
-    let github_client_id = dotenvy::var("GITHUB_CLIENT_ID").expect("GITHUB_CLIENT_ID must be set");
-    let github_client_secret =
-        dotenvy::var("GITHUB_CLIENT_SECRET").expect("GITHUB_CLIENT_SECRET must be set");
-
-    let github_client_id = ClientId::new(github_client_id);
-    let github_client_secret = ClientSecret::new(github_client_secret);
+    let github_client_id = ClientId::new(config.github_client_id.to_owned());
+    let github_client_secret = ClientSecret::new(config.github_client_secret.to_owned());
     let auth_url = AuthUrl::new("https://github.com/login/oauth/authorize".to_string())?;
     let token_url = TokenUrl::new("https://github.com/login/oauth/access_token".to_string())?;
 
@@ -71,9 +67,10 @@ pub async fn serve(config: Config, db: PgPool) -> anyhow::Result<()> {
         .set_client_secret(github_client_secret)
         .set_auth_uri(auth_url)
         .set_token_uri(token_url)
-        .set_redirect_uri(RedirectUrl::new(
-            "http://0.0.0.0:3000/auth/github/callback".to_string(),
-        )?);
+        .set_redirect_uri(RedirectUrl::new(format!(
+            "http://0.0.0.0:{}/auth/github/callback",
+            &config.port
+        ))?);
 
     let app_state = AppState {
         config: config.clone(),
