@@ -1,6 +1,6 @@
 use crate::config::Config;
 use anyhow::Context;
-use axum::Router;
+use axum::{Router, routing::get};
 use chrono::{DateTime, Utc};
 use error::Error;
 use oauth2::{
@@ -21,8 +21,9 @@ use tower_http::{
     trace::TraceLayer,
 };
 
+mod auth;
 mod error;
-mod routes;
+mod heartbeat;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -90,56 +91,20 @@ pub async fn serve(config: Config, db: PgPool) -> anyhow::Result<()> {
 }
 
 fn app_router(app_state: AppState) -> Router {
-    Router::new().merge(routes::router(app_state)).layer((
-        CompressionLayer::new(),
-        TraceLayer::new_for_http().on_failure(()),
-        TimeoutLayer::new(Duration::from_secs(30)),
-        CatchPanicLayer::new(),
-    ))
+    Router::new()
+        .route("/", get(auth::success))
+        .route("/auth/github", get(auth::github))
+        .route("/auth/github/callback", get(auth::github_callback))
+        .route("/auth/logout", get(auth::logout))
+        .route("/heartbeat", get(heartbeat::heartbeat))
+        .layer((
+            CompressionLayer::new(),
+            TraceLayer::new_for_http().on_failure(()),
+            TimeoutLayer::new(Duration::from_secs(30)),
+            CatchPanicLayer::new(),
+        ))
+        .with_state(app_state)
 }
-
-// async fn store_or_update_user(
-//     db: &PgPool,
-//     github_user: &GitHubUser,
-//     email: Option<&str>,
-// ) -> Result<i32, sqlx::Error> {
-//     let now = chrono::Utc::now();
-
-//     let user = sqlx::query!(
-//         r#"
-//         INSERT INTO users (username, email, created_at)
-//         VALUES ($1, $2, $3)
-//         ON CONFLICT (email)
-//         DO UPDATE SET
-//             username = EXCLUDED.username
-//         WHERE users.email = EXCLUDED.email
-//         RETURNING id
-//         "#,
-//         github_user.login,
-//         email,
-//         now
-//     )
-//     .fetch_one(db)
-//     .await?;
-
-//     Ok(user.id)
-// }
-
-// async fn get_user_by_id(db: &PgPool, user_id: i32) -> Result<Option<User>, sqlx::Error> {
-//     let user = sqlx::query_as!(
-//         User,
-//         r#"
-//         SELECT id, username, email, created_at
-//         FROM users
-//         WHERE id = $1
-//         "#,
-//         user_id
-//     )
-//     .fetch_optional(db)
-//     .await?;
-
-//     Ok(user)
-// }
 
 async fn shutdown_signal() {
     use tokio::signal;

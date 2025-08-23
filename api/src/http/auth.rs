@@ -1,14 +1,36 @@
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    response::Redirect,
-};
+use axum::response::Html;
+use axum::{extract::State, http::StatusCode, response::Redirect};
+use oauth2::{CsrfToken, PkceCodeChallenge, Scope};
+
+use crate::http::{AppState, Error, Result};
+
+use crate::http::{AuthRequest, GitHubUser};
+use axum::extract::Query;
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use oauth2::{AuthorizationCode, PkceCodeVerifier, TokenResponse};
 
-use crate::http::{AppState, AuthRequest, GitHubUser};
+pub async fn github(State(state): State<AppState>) -> Result<Redirect, StatusCode> {
+    let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
-pub async fn route(
+    let (auth_url, csrf_token) = state
+        .oauth_client
+        .authorize_url(CsrfToken::new_random)
+        .add_scope(Scope::new("user:email".to_string()))
+        .set_pkce_challenge(pkce_challenge)
+        .url();
+
+    {
+        let mut states = state.oauth_states.write().await;
+        states.insert(
+            csrf_token.secret().to_string(),
+            pkce_verifier.secret().to_string(),
+        );
+    }
+
+    Ok(Redirect::to(auth_url.as_str()))
+}
+
+pub async fn github_callback(
     Query(params): Query<AuthRequest>,
     State(state): State<AppState>,
     jar: CookieJar,
@@ -88,4 +110,22 @@ pub async fn route(
         .build();
 
     Ok((jar.add(cookie), Redirect::to("/")))
+}
+
+pub async fn logout(jar: CookieJar) -> Result<CookieJar> {
+    let cookie = Cookie::build(("user_id", ""))
+        .path("/")
+        .max_age(time::Duration::seconds(0))
+        .build();
+
+    Ok(jar.add(cookie))
+}
+
+pub async fn success(jar: CookieJar) -> Result<Html<&'static str>> {
+    match jar.get("user_id") {
+        Some(_) => Ok(Html(r#" <h1>Welcome!</h1> <p>You are logged in.</p> "#)),
+        _ => Err(Error::Unauthorized {
+            message: "You need to login to access this page.".to_string(),
+        }),
+    }
 }
