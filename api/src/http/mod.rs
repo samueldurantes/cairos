@@ -1,6 +1,9 @@
 use crate::config::Config;
 use anyhow::Context;
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use error::Error;
 use oauth2::{
     AuthUrl, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl, TokenUrl,
@@ -15,7 +18,7 @@ use std::{
     time::Duration,
 };
 use time::OffsetDateTime;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::RwLock};
 use tower_http::{
     catch_panic::CatchPanicLayer, compression::CompressionLayer, timeout::TimeoutLayer,
     trace::TraceLayer,
@@ -31,14 +34,15 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub struct AppState {
     pub config: Config,
     pub db: PgPool,
-    pub oauth_client:
-        BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>,
-    pub oauth_states: Arc<tokio::sync::RwLock<HashMap<String, String>>>,
+    // pub oauth_client: BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>,
+    pub device_codes: Arc<RwLock<HashMap<String, u64>>>,
+    // TODO: Add reqwest::client here.
+    // pub oauth_states: Arc<tokio::sync::RwLock<HashMap<String, String>>>,
 }
 
 #[derive(Debug)]
 pub struct User {
-    pub id: u64,
+    pub id: i32,
     pub username: String,
     pub email: String,
     pub created_at: OffsetDateTime,
@@ -46,9 +50,7 @@ pub struct User {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitHubUser {
-    pub id: i64,
     pub login: String,
-    pub name: Option<String>,
     pub email: Option<String>,
 }
 
@@ -76,8 +78,8 @@ pub async fn serve(config: Config, db: PgPool) -> anyhow::Result<()> {
     let app_state = AppState {
         config: config.clone(),
         db,
-        oauth_client,
-        oauth_states: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        // oauth_client,
+        device_codes: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     };
 
     let addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, config.port));
@@ -92,11 +94,7 @@ pub async fn serve(config: Config, db: PgPool) -> anyhow::Result<()> {
 
 fn app_router(app_state: AppState) -> Router {
     Router::new()
-        .route("/", get(auth::success))
-        .route("/auth/github", get(auth::github))
-        .route("/auth/github/callback", get(auth::github_callback))
-        .route("/auth/logout", get(auth::logout))
-        .route("/heartbeat", get(heartbeat::heartbeat))
+        // .route("/auth/register", post(auth::register))
         .layer((
             CompressionLayer::new(),
             TraceLayer::new_for_http().on_failure(()),

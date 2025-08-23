@@ -1,131 +1,135 @@
-use axum::response::Html;
-use axum::{extract::State, http::StatusCode, response::Redirect};
-use oauth2::{CsrfToken, PkceCodeChallenge, Scope};
+use crate::http::{AppState, Error, GitHubUser, Result, User};
+use axum::{extract::State, response::Json};
+use serde::Serialize;
+use sqlx::PgPool;
 
-use crate::http::{AppState, Error, Result};
-
-use crate::http::{AuthRequest, GitHubUser};
-use axum::extract::Query;
-use axum_extra::extract::cookie::{Cookie, CookieJar};
-use oauth2::{AuthorizationCode, PkceCodeVerifier, TokenResponse};
-
-pub async fn github(State(state): State<AppState>) -> Result<Redirect, StatusCode> {
-    let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
-
-    let (auth_url, csrf_token) = state
-        .oauth_client
-        .authorize_url(CsrfToken::new_random)
-        .add_scope(Scope::new("user:email".to_string()))
-        .set_pkce_challenge(pkce_challenge)
-        .url();
-
-    {
-        let mut states = state.oauth_states.write().await;
-        states.insert(
-            csrf_token.secret().to_string(),
-            pkce_verifier.secret().to_string(),
-        );
-    }
-
-    Ok(Redirect::to(auth_url.as_str()))
+#[derive(Serialize)]
+pub struct AuthTokenPayload {
+    access_token: String,
 }
 
-pub async fn github_callback(
-    Query(params): Query<AuthRequest>,
+pub async fn register(
     State(state): State<AppState>,
-    jar: CookieJar,
-) -> Result<(CookieJar, Redirect), StatusCode> {
-    let pkce_verifier = {
-        let mut states = state.oauth_states.write().await;
-        states.remove(&params.state)
-    }
-    .ok_or(StatusCode::BAD_GATEWAY)?;
-
+    Json(payload): Json<AuthTokenPayload>,
+) -> Result<()> {
     let client = reqwest::Client::builder()
         .user_agent("CAIROS/1.0.0")
         .build()
         .expect("Error on build Client.");
 
-    let token_result = state
-        .oauth_client
-        .exchange_code(AuthorizationCode::new(params.code))
-        .set_pkce_verifier(PkceCodeVerifier::new(pkce_verifier))
-        .request_async(&client)
-        .await
-        .map_err(|e| {
-            log::error!("OAuth token exchange failed: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
     let user_response = client
         .get("https://api.github.com/user")
-        .bearer_auth(token_result.access_token().secret())
+        .bearer_auth(&payload.access_token)
         .send()
         .await
         .map_err(|e| {
             log::error!("Error on get user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
+            Error::InternalServerError
         })?;
 
     let github_user: GitHubUser = user_response.json().await.map_err(|e| {
         log::error!("Error on jsonfy: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
+        Error::InternalServerError
     })?;
 
-    let email = if github_user.email.is_none() {
+    let email = if let Some(email) = github_user.email {
+        email
+    } else {
         let email_response = client
             .get("https://api.github.com/user/emails")
-            .bearer_auth(token_result.access_token().secret())
+            .bearer_auth(&payload.access_token)
             .send()
             .await
             .map_err(|e| {
                 log::error!("Error on request github email: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
+                Error::InternalServerError
             })?;
 
         let emails: Vec<serde_json::Value> = email_response.json().await.map_err(|e| {
             log::error!("Error on request deserialize email_response: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
+            Error::InternalServerError
         })?;
 
-        emails
+        let Some(email) = emails
             .iter()
             .find(|email| email["primary"].as_bool().unwrap_or(false))
-            .and_then(|email| email["email"].as_str())
             .map(|s| s.to_string())
-    } else {
-        github_user.email
+        else {
+            return Err(Error::InternalServerError);
+        };
+
+        email
     };
 
-    let user_id = 1;
-    // let user_id = match store_or_update_user(&state.db, &github_user, email.as_deref()).await {
-    //     Ok(id) => id,
-    //     Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    // };
+    let user_id = match store_or_update_user(
+        &state.db,
+        &CreateUser {
+            username: github_user.login,
+            email,
+        },
+    )
+    .await
+    {
+        Ok(id) => id,
+        Err(_) => return Err(Error::InternalServerError),
+    };
 
-    let cookie = Cookie::build(("user_id", user_id.to_string()))
-        .path("/")
-        .max_age(time::Duration::days(7))
-        .http_only(true)
-        .build();
-
-    Ok((jar.add(cookie), Redirect::to("/")))
+    Ok(())
 }
 
-pub async fn logout(jar: CookieJar) -> Result<CookieJar> {
-    let cookie = Cookie::build(("user_id", ""))
-        .path("/")
-        .max_age(time::Duration::seconds(0))
-        .build();
-
-    Ok(jar.add(cookie))
+struct CreateUser {
+    username: String,
+    email: String,
 }
 
-pub async fn success(jar: CookieJar) -> Result<Html<&'static str>> {
-    match jar.get("user_id") {
-        Some(_) => Ok(Html(r#" <h1>Welcome!</h1> <p>You are logged in.</p> "#)),
-        _ => Err(Error::Unauthorized {
-            message: "You need to login to access this page.".to_string(),
-        }),
-    }
+async fn store_or_update_user(db: &PgPool, user: &CreateUser) -> Result<i32, sqlx::Error> {
+    // let other = sqlx::query!(
+    //     r#"
+    //     INSERT INTO users (username, email)
+    //     VALUES ($1, $2)
+    //     ON CONFLICT (email)
+    //     DO UPDATE SET
+    //         username = EXCLUDED.username
+    //     WHERE users.email = EXCLUDED.email
+    //     RETURNING id
+    //     "#,
+    //     user.username,
+    //     user.email,
+    // )
+    // .fetch_one(db)
+    // .await?;
+
+    let user = sqlx::query!(
+        r#"
+        INSERT INTO users (username, email)
+        VALUES ($1, $2)
+        ON CONFLICT (email)
+        DO UPDATE SET
+            username = EXCLUDED.username
+        WHERE users.email = EXCLUDED.email
+        RETURNING id
+        "#,
+        user.username,
+        user.email,
+    )
+    .fetch_one(db)
+    .await?;
+
+    Ok(user.id)
+}
+
+async fn get_user_by_id(db: &PgPool, user_id: i32) -> Result<Option<User>, sqlx::Error> {
+    let user = sqlx::query_as!(
+        User,
+        r#"
+        SELECT id, username, email, created_at
+        FROM users
+        WHERE id = $1
+        "#,
+        user_id
+    )
+    .fetch_optional(db)
+    .await?;
+
+    Ok(user)
 }
