@@ -1,7 +1,6 @@
 use crate::config::Config;
 use anyhow::Context;
 use axum::{Router, routing::get};
-use chrono::{DateTime, Utc};
 use error::Error;
 use oauth2::{
     AuthUrl, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl, TokenUrl,
@@ -15,6 +14,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use time::OffsetDateTime;
 use tokio::net::TcpListener;
 use tower_http::{
     catch_panic::CatchPanicLayer, compression::CompressionLayer, timeout::TimeoutLayer,
@@ -41,7 +41,7 @@ pub struct User {
     pub id: u64,
     pub username: String,
     pub email: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: OffsetDateTime,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

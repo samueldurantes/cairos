@@ -125,7 +125,6 @@ dependencies = [
  "anyhow",
  "axum",
  "axum-extra",
- "chrono",
  "clap",
  "dotenvy",
  "env_logger",

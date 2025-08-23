@@ -33,5 +33,4 @@ log = "0.4.27"
 thiserror = "2.0.12"
 oauth2 = { version = "5.0.0", features = ["reqwest"] }
 axum-extra = { version = "0.10.1", features = ["cookie"] }
-chrono = "0.4.41"
 reqwest = { version = "0.12.23", features = ["json"] }
