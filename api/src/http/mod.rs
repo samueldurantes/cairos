@@ -27,7 +27,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub struct AppState {
     pub config: Config,
     pub db: PgPool,
-    client: Client, // TODO: Add reqwest::client here.
+    client: Client,
 }
 
 #[derive(Debug)]

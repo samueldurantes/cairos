@@ -9,18 +9,21 @@ pub struct AuthTokenPayload {
     pub access_token: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct RegisterResponse {
+    pub message: String,
+}
+
 pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<AuthTokenPayload>,
-) -> Result<()> {
-    let client = reqwest::Client::builder()
-        .user_agent("CAIROS/1.0.0")
-        .build()
-        .expect("Error on build Client.");
+) -> Result<Json<RegisterResponse>> {
+    let AuthTokenPayload { access_token } = payload;
+    let AppState { db, client, .. } = state;
 
     let user_response = client
         .get("https://api.github.com/user")
-        .bearer_auth(&payload.access_token)
+        .bearer_auth(&access_token)
         .send()
         .await
         .map_err(|e| {
@@ -38,7 +41,7 @@ pub async fn register(
     } else {
         let email_response = client
             .get("https://api.github.com/user/emails")
-            .bearer_auth(&payload.access_token)
+            .bearer_auth(&access_token)
             .send()
             .await
             .map_err(|e| {
@@ -63,7 +66,7 @@ pub async fn register(
     };
 
     let user_id = match store_or_update_user(
-        &state.db,
+        &db,
         &CreateUser {
             username: github_user.login,
             email,
@@ -75,9 +78,11 @@ pub async fn register(
         Err(_) => return Err(Error::InternalServerError),
     };
 
-    store_auth_token(&state.db, user_id, &payload.access_token).await?;
+    store_auth_token(&db, user_id, &access_token).await?;
 
-    Ok(())
+    Ok(Json(RegisterResponse {
+        message: "Registered succesfully!".to_string(),
+    }))
 }
 
 struct CreateUser {
