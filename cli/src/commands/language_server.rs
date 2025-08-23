@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower_lsp::{
@@ -29,6 +28,7 @@ pub struct CurrentFile {
 
 struct CairosLanguangeServer {
     client: Client,
+    api_key: String,
     current_file: Mutex<CurrentFile>,
 }
 
@@ -124,13 +124,13 @@ impl LanguageServer for CairosLanguangeServer {
     }
 }
 
-#[tokio::main]
-async fn main() {
+pub async fn run(api_key: String) {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
     let (service, socket) = LspService::new(|client| {
         Arc::new(CairosLanguangeServer {
             client,
+            api_key,
             current_file: Mutex::new(CurrentFile {
                 uri: String::new(),
                 timestamp: time::OffsetDateTime::now_utc(),
