@@ -7,7 +7,7 @@ ALTER COLUMN email TYPE TEXT;
 CREATE TABLE auth_tokens (
     id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id INT REFERENCES users(id),
-    token BYTEA,
+    token TEXT UNIQUE,
     active BOOL,
     created_at TIMESTAMPTZ
 );

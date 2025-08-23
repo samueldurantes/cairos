@@ -1,11 +1,12 @@
-use crate::http::{AppState, Error, GitHubUser, Result, User};
-use axum::{extract::State, response::Json};
-use serde::Serialize;
+use crate::http::{AppState, Error, GitHubUser, Result};
+use axum::extract::{Json, State};
+
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AuthTokenPayload {
-    access_token: String,
+    pub access_token: String,
 }
 
 pub async fn register(
@@ -74,6 +75,8 @@ pub async fn register(
         Err(_) => return Err(Error::InternalServerError),
     };
 
+    store_auth_token(&state.db, user_id, &payload.access_token).await?;
+
     Ok(())
 }
 
@@ -82,23 +85,23 @@ struct CreateUser {
     email: String,
 }
 
-async fn store_or_update_user(db: &PgPool, user: &CreateUser) -> Result<i32, sqlx::Error> {
-    // let other = sqlx::query!(
-    //     r#"
-    //     INSERT INTO users (username, email)
-    //     VALUES ($1, $2)
-    //     ON CONFLICT (email)
-    //     DO UPDATE SET
-    //         username = EXCLUDED.username
-    //     WHERE users.email = EXCLUDED.email
-    //     RETURNING id
-    //     "#,
-    //     user.username,
-    //     user.email,
-    // )
-    // .fetch_one(db)
-    // .await?;
+async fn store_auth_token(
+    db: &PgPool,
+    user_id: i32,
+    access_token: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#" INSERT INTO auth_tokens (user_id, token) VALUES ($1, $2) "#,
+        user_id,
+        access_token,
+    )
+    .fetch_one(db)
+    .await?;
 
+    Ok(())
+}
+
+async fn store_or_update_user(db: &PgPool, user: &CreateUser) -> Result<i32, sqlx::Error> {
     let user = sqlx::query!(
         r#"
         INSERT INTO users (username, email)
@@ -116,20 +119,4 @@ async fn store_or_update_user(db: &PgPool, user: &CreateUser) -> Result<i32, sql
     .await?;
 
     Ok(user.id)
-}
-
-async fn get_user_by_id(db: &PgPool, user_id: i32) -> Result<Option<User>, sqlx::Error> {
-    let user = sqlx::query_as!(
-        User,
-        r#"
-        SELECT id, username, email, created_at
-        FROM users
-        WHERE id = $1
-        "#,
-        user_id
-    )
-    .fetch_optional(db)
-    .await?;
-
-    Ok(user)
 }

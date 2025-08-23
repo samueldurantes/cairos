@@ -1,14 +1,9 @@
 use crate::config::Config;
 use anyhow::Context;
-use axum::{
-    Router,
-    routing::{get, post},
-};
+use auth::register;
+use axum::{Router, routing::post};
 use error::Error;
-use oauth2::{
-    AuthUrl, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl, TokenUrl,
-    basic::BasicClient,
-};
+use oauth2::{AuthUrl, ClientId, ClientSecret, RedirectUrl, TokenUrl, basic::BasicClient};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::{
@@ -94,7 +89,8 @@ pub async fn serve(config: Config, db: PgPool) -> anyhow::Result<()> {
 
 fn app_router(app_state: AppState) -> Router {
     Router::new()
-        // .route("/auth/register", post(auth::register))
+        // .route("/heartbeat", post(heartbeat))
+        .route("/auth/register", post(register))
         .layer((
             CompressionLayer::new(),
             TraceLayer::new_for_http().on_failure(()),
