@@ -1,0 +1,15 @@
+[package]
+name = "language-server"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+time = "0.3.41"
+tokio = { version = "1.47.1", features = [
+    "io-std",
+    "macros",
+    "process",
+    "rt-multi-thread",
+], default-features = false }
+tower-lsp = "0.20.0"
+url = "2.5.6"
