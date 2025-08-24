@@ -1,21 +1,37 @@
-use crate::http::{AppState, Error, Result};
-use axum::{extract::State, http::StatusCode};
-use axum_extra::{
-    TypedHeader,
-    headers::{Authorization, authorization::Bearer},
-};
+use crate::http::{AppState, Result, extractor::AuthUser};
+use axum::{Json, extract::State};
+use serde::{Deserialize, Serialize};
+
+#[derive(Deserialize)]
+pub struct CaptureRequest {
+    uri: String,
+    language: String,
+    line_number: i32,
+    cursor_pos: i32,
+}
+
+#[derive(Serialize)]
+pub struct CaptureResponse {
+    success: bool,
+}
 
 pub async fn capture(
-    State(_): State<AppState>,
-    auth_header: Option<TypedHeader<Authorization<Bearer>>>,
-) -> Result<StatusCode> {
-    let auth = auth_header.ok_or(Error::Unauthorized {
-        message: "Missing authorization header".to_string(),
-    })?;
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Json(payload): Json<CaptureRequest>,
+) -> Result<Json<CaptureResponse>> {
+    crate::queries::events::create(
+        &state.db,
+        &crate::queries::events::CreateParams {
+            uri: payload.uri,
+            language: payload.language,
+            line_number: payload.line_number,
+            cursor_pos: payload.cursor_pos,
+            user_id: auth_user.id,
+            now: time::OffsetDateTime::now_utc(),
+        },
+    )
+    .await?;
 
-    let _token = auth.token();
-
-    println!("Heartbeat received");
-
-    Ok(StatusCode::OK)
+    Ok(Json(CaptureResponse { success: true }))
 }

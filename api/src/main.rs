@@ -4,6 +4,7 @@ use sqlx::postgres::PgPoolOptions;
 
 mod config;
 mod http;
+mod queries;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

@@ -1,17 +1,22 @@
-use crate::http::{AppState, Error, GitHubUser, Result};
+use crate::http::{AppState, Error, Result};
 use axum::extract::{Json, State};
-
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 
-#[derive(Serialize, Deserialize)]
-pub struct AuthTokenPayload {
+#[derive(Deserialize)]
+pub struct LoginRequest {
     pub access_token: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct RegisterResponse {
-    pub message: String,
+#[derive(Serialize)]
+pub struct LoginResponse {
+    pub token: String,
+}
+
+#[derive(Deserialize)]
+pub struct GitHubUser {
+    pub login: String,
+    pub email: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -22,8 +27,8 @@ struct GitHubEmail {
 
 pub async fn login(
     State(state): State<AppState>,
-    Json(payload): Json<AuthTokenPayload>,
-) -> Result<Json<RegisterResponse>> {
+    Json(payload): Json<LoginRequest>,
+) -> Result<Json<LoginResponse>> {
     let user_response = state
         .client
         .get("https://api.github.com/user")
@@ -70,60 +75,27 @@ pub async fn login(
         email
     };
 
-    let user_id = store_or_update_user(
+    let now = time::OffsetDateTime::now_utc();
+
+    let user_id = crate::queries::user::create(
         &state.db,
-        &CreateUser {
+        &crate::queries::user::CreateParams {
             username: github_user.login,
             email,
+            now,
         },
     )
-    .await
-    .map_err(|_| Error::InternalServerError)?;
-
-    store_auth_token(&state.db, user_id, &payload.access_token).await?;
-
-    Ok(Json(RegisterResponse {
-        message: "Registered succesfully!".to_string(),
-    }))
-}
-
-struct CreateUser {
-    username: String,
-    email: String,
-}
-
-async fn store_auth_token(
-    db: &PgPool,
-    user_id: i32,
-    access_token: &str,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#" INSERT INTO auth_tokens (user_id, token) VALUES ($1, $2) "#,
-        user_id,
-        access_token,
-    )
-    .fetch_one(db)
     .await?;
 
-    Ok(())
+    let token = generate_token();
+
+    crate::queries::auth_tokens::create(&state.db, user_id, &token).await?;
+
+    Ok(Json(LoginResponse { token }))
 }
 
-async fn store_or_update_user(db: &PgPool, user: &CreateUser) -> Result<i32, sqlx::Error> {
-    let user = sqlx::query!(
-        r#"
-        INSERT INTO users (username, email)
-        VALUES ($1, $2)
-        ON CONFLICT (email)
-        DO UPDATE SET
-            username = EXCLUDED.username
-        WHERE users.email = EXCLUDED.email
-        RETURNING id
-        "#,
-        user.username,
-        user.email,
-    )
-    .fetch_one(db)
-    .await?;
-
-    Ok(user.id)
+pub fn generate_token() -> String {
+    let mut bytes = vec![0u8; 16];
+    rand::rng().fill_bytes(&mut bytes);
+    hex::encode(bytes)
 }
