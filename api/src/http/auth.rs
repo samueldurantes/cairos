@@ -65,7 +65,7 @@ pub async fn register(
         email
     };
 
-    let user_id = match store_or_update_user(
+    let user_id = store_or_update_user(
         &db,
         &CreateUser {
             username: github_user.login,
@@ -73,10 +73,7 @@ pub async fn register(
         },
     )
     .await
-    {
-        Ok(id) => id,
-        Err(_) => return Err(Error::InternalServerError),
-    };
+    .map_err(|_| Error::InternalServerError)?;
 
     store_auth_token(&db, user_id, &access_token).await?;
 
