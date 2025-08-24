@@ -14,16 +14,20 @@ pub struct RegisterResponse {
     pub message: String,
 }
 
-pub async fn register(
+#[derive(Deserialize)]
+struct GitHubEmail {
+    email: String,
+    primary: bool,
+}
+
+pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<AuthTokenPayload>,
 ) -> Result<Json<RegisterResponse>> {
-    let AuthTokenPayload { access_token } = payload;
-    let AppState { db, client, .. } = state;
-
-    let user_response = client
+    let user_response = state
+        .client
         .get("https://api.github.com/user")
-        .bearer_auth(&access_token)
+        .bearer_auth(&payload.access_token)
         .send()
         .await
         .map_err(|e| {
@@ -39,9 +43,10 @@ pub async fn register(
     let email = if let Some(email) = github_user.email {
         email
     } else {
-        let email_response = client
+        let email_response = state
+            .client
             .get("https://api.github.com/user/emails")
-            .bearer_auth(&access_token)
+            .bearer_auth(&payload.access_token)
             .send()
             .await
             .map_err(|e| {
@@ -49,15 +54,15 @@ pub async fn register(
                 Error::InternalServerError
             })?;
 
-        let emails: Vec<serde_json::Value> = email_response.json().await.map_err(|e| {
+        let emails: Vec<GitHubEmail> = email_response.json().await.map_err(|e| {
             log::error!("Error on request deserialize email_response: {e}");
             Error::InternalServerError
         })?;
 
         let Some(email) = emails
             .iter()
-            .find(|email| email["primary"].as_bool().unwrap_or(false))
-            .map(|s| s.to_string())
+            .find(|email| email.primary)
+            .map(|s| s.email.clone())
         else {
             return Err(Error::InternalServerError);
         };
@@ -66,7 +71,7 @@ pub async fn register(
     };
 
     let user_id = store_or_update_user(
-        &db,
+        &state.db,
         &CreateUser {
             username: github_user.login,
             email,
@@ -75,7 +80,7 @@ pub async fn register(
     .await
     .map_err(|_| Error::InternalServerError)?;
 
-    store_auth_token(&db, user_id, &access_token).await?;
+    store_auth_token(&state.db, user_id, &payload.access_token).await?;
 
     Ok(Json(RegisterResponse {
         message: "Registered succesfully!".to_string(),

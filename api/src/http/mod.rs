@@ -1,6 +1,5 @@
 use crate::config::Config;
 use anyhow::Context;
-use auth::register;
 use axum::{Router, routing::post};
 use error::Error;
 use reqwest::Client;
@@ -19,7 +18,7 @@ use tower_http::{
 
 mod auth;
 mod error;
-mod heartbeat;
+mod events;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -66,8 +65,8 @@ pub async fn serve(config: Config, db: PgPool) -> anyhow::Result<()> {
 
 fn app_router(app_state: AppState) -> Router {
     Router::new()
-        // .route("/heartbeat", post(heartbeat))
-        .route("/auth/register", post(register))
+        .route("/events/capture", post(events::capture))
+        .route("/login", post(auth::login))
         .layer((
             CompressionLayer::new(),
             TraceLayer::new_for_http().on_failure(()),
