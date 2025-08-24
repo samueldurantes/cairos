@@ -1,7 +1,7 @@
 CREATE TABLE users (
     id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    username TEXT,
-    email BYTEA NOT NULL,
+    username TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE NOT NULL,
     created_at TIMESTAMPTZ NOT NULL
 );
 
@@ -11,6 +11,14 @@ CREATE TABLE events (
     language TEXT NOT NULL,
     line_number INT NOT NULL,
     cursor_pos INT NOT NULL,
-    user_id INT REFERENCES users(id),
+    user_id INT NOT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE auth_tokens (
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    token TEXT UNIQUE NOT NULL,
+    user_id INT NOT NULL REFERENCES users(id),
+    disabled_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL
 );

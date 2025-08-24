@@ -2,14 +2,11 @@ use crate::config::Config;
 use anyhow::Context;
 use axum::{Router, routing::post};
 use error::Error;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::{
     net::{Ipv4Addr, SocketAddr},
     time::Duration,
 };
-use time::OffsetDateTime;
 use tokio::net::TcpListener;
 use tower_http::{
     catch_panic::CatchPanicLayer, compression::CompressionLayer, timeout::TimeoutLayer,
@@ -19,38 +16,23 @@ use tower_http::{
 mod auth;
 mod error;
 mod events;
+mod extractor;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub config: Config,
-    pub db: PgPool,
-    client: Client,
-}
-
-#[derive(Debug)]
-pub struct User {
-    pub id: i32,
-    pub username: String,
-    pub email: String,
-    pub created_at: OffsetDateTime,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GitHubUser {
-    pub login: String,
-    pub email: Option<String>,
+    pub db: sqlx::PgPool,
+    pub client: reqwest::Client,
 }
 
 pub async fn serve(config: Config, db: PgPool) -> anyhow::Result<()> {
     let app_state = AppState {
-        config: config.clone(),
-        client: Client::builder()
+        db,
+        client: reqwest::Client::builder()
             .user_agent("CAIROS/1.0.0")
             .build()
             .expect("Error on build Client."),
-        db,
     };
 
     let addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, config.port));
@@ -66,7 +48,7 @@ pub async fn serve(config: Config, db: PgPool) -> anyhow::Result<()> {
 fn app_router(app_state: AppState) -> Router {
     Router::new()
         .route("/events/capture", post(events::capture))
-        .route("/login", post(auth::login))
+        .route("/auth/login", post(auth::login))
         .layer((
             CompressionLayer::new(),
             TraceLayer::new_for_http().on_failure(()),

@@ -8,10 +8,4 @@ pub struct Config {
 
     #[clap(short, env, default_value = "3000")]
     pub port: u16,
-
-    #[clap(long, env)]
-    pub github_client_id: String,
-
-    #[clap(long, env)]
-    pub github_client_secret: String,
 }
