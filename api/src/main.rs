@@ -13,7 +13,7 @@ async fn main() -> anyhow::Result<()> {
 
     let config = config::Config::parse();
     let db = PgPoolOptions::new()
-        .max_connections(50)
+        .max_connections(config.database_max_connections)
         .connect(&config.database_url)
         .await
         .context("Error when trying to connect to database")?;

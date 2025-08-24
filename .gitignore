@@ -1,2 +1,9 @@
+debug
 target
 *.wasm
+**/*.rs.bk
+*.pdb
+**/mutants.out*/
+.env
+
+.sqlx
