@@ -1,0 +1,16 @@
+services:
+  database:
+    image: "postgres:17"
+    volumes:
+      - .db:/var/lib/postgresql/data/pgdata
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: cairos
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    networks:
+      - cairos_network
+networks:
+  cairos_network:
+    driver: bridge
