@@ -8,9 +8,10 @@ CREATE TABLE users (
 CREATE TABLE events (
     id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uri TEXT NOT NULL,
-    language TEXT NOT NULL,
-    line_number INT NOT NULL,
-    cursor_pos INT NOT NULL,
+    is_write BOOL NOT NULL,
+    language TEXT,
+    line_number INT,
+    cursor_pos INT,
     user_id INT NOT NULL REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL
 );

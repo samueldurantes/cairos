@@ -89,7 +89,7 @@ pub async fn login(
 
     let token = generate_token();
 
-    crate::queries::auth_tokens::create(&state.db, user_id, &token).await?;
+    crate::queries::auth_tokens::create(&state.db, user_id, &token, now).await?;
 
     Ok(Json(LoginResponse { token }))
 }
