@@ -5,5 +5,5 @@ target
 *.pdb
 **/mutants.out*/
 .env
-
+.db
 .sqlx
