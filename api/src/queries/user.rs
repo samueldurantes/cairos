@@ -3,6 +3,7 @@ use std::ops::Deref;
 use super::QueryResult;
 use time::OffsetDateTime;
 
+#[derive(Debug)]
 pub struct UserId(i32);
 
 impl Deref for UserId {

@@ -13,9 +13,9 @@ impl zed_extension_api::Extension for CairosExtension {
         worktree: &Worktree,
     ) -> Result<Command> {
         Ok(Command {
-            args: vec![],
+            args: vec!["language-server".to_owned()],
             // TODO: Download binary before start the extension
-            command: String::from("/Users/samuel/fun/cairos/target/debug/language-server"),
+            command: String::from("/Users/samuel/workspace/cairos/target/debug/cli"),
             env: worktree.shell_env(),
         })
     }

@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize)]
 pub struct CaptureRequest {
     uri: String,
-    language: String,
-    line_number: i32,
-    cursor_pos: i32,
+    is_write: bool,
+    language: Option<String>,
+    line_number: Option<i32>,
+    cursor_pos: Option<i32>,
 }
 
 #[derive(Serialize)]
@@ -24,6 +25,7 @@ pub async fn capture(
         &state.db,
         &crate::queries::events::CreateParams {
             uri: payload.uri,
+            is_write: payload.is_write,
             language: payload.language,
             line_number: payload.line_number,
             cursor_pos: payload.cursor_pos,
