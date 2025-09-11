@@ -1,6 +1,6 @@
 use reqwest::StatusCode;
 
-#[derive(thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Request failed (Status: {0:?}) = {1:?}")]
     Request(Option<StatusCode>, String),
