@@ -35,7 +35,7 @@ pub fn get_or_create_config_content(config_file_path: PathBuf) -> io::Result<Str
         File::create(&config_file_path)?;
 
         let my_config = Config {
-            base_url: "https://localhost".to_owned(),
+            base_url: "http://localhost:3000".to_owned(),
             token: None,
         };
 
